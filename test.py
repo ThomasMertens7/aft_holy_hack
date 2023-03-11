@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 from scipy import integrate
 from sklearn.linear_model import LinearRegression
 from calendar import monthrange
+from sklearn.ensemble import BaggingRegressor
+from sklearn.tree import DecisionTreeRegressor
+
+
 
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 DAY0 = 6
@@ -14,6 +18,8 @@ CONVERSION_FACTOR_PRICE = 0.40 # 40 cent per KWH
 CONVERSION_FACOTOR_EMISSION = 0.14 # 0,14 kg CO2 per KWH
 AVERAGE_FAMILY_EMISSION_YEAR = 2690 # 2690 kg CO2 average annual emission of family
 HOURSE_IN_DAY = 24
+
+
 
 def change_power_to_price(x_test, y_serie):
     for current_index in range(len(x_test)):
@@ -26,10 +32,7 @@ def load_data():
     data_folder = os.path.join(Path(os.getcwd()).parent, 'data')
     csvfiles = [os.path.join(data_folder, f) for f in os.listdir(data_folder) if f.endswith('.csv')]
     save_to_excel = False
-    index_file_to_read = 0 #  case 1
-
-    DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    DAY0 = 6
+    index_file_to_read = 2 #  case 1
 
     data = pd.read_csv(csvfiles[index_file_to_read], low_memory=False)
     if save_to_excel:
@@ -83,12 +86,15 @@ def resample_24h(data_ml):
     print(data_test.head())
     return data_train, data_test
 
-def analyse_hp_power_consumption(data_train, output_cols):
+def analyse_hp_power_consumption(data_train,data_test, output_cols):
     power_to_estimate = 'hp'
     power_ind = 0 if power_to_estimate=='buh' else 1 if power_to_estimate=='hp' else 0
-
+    print("////////")
+    import numpy as np
+    print(data_test.head())
+    print("////////")
     x_train, y_train = data_train.iloc[:, [0,1,3]].values, data_train[output_cols[power_ind]].values
-    x_test, y_test = data_train.iloc[:,[0,1,3]].values, data_train[output_cols[power_ind]].values
+    x_test, y_test = data_test.iloc[:,[0,1,3]].values, data_test[output_cols[power_ind]].values
 
     print('here')
     print(output_cols[power_ind])
@@ -101,10 +107,42 @@ def data_to_model(x_train, y_train):
     print(f"coefficient of determination: {r_2}")
     return model, r_2
 
+def data_to_nonlinear_model(x_train_linear, x_train_categorical, y_train):
+    # separate the categorical and linear columns
+    x_train_linear = x_train_linear.drop('day_of_week', axis=1)
+    x_data_nonlinear_categorical = x_train_categorical[['day_of_week']]
+
+    # convert the day of the week column to categorical datatype
+    x_data_nonlinear_categorical['day_of_week'] = x_data_nonlinear_categorical['day_of_week'].astype('category')
+
+    # create a decision tree model for the categorical variables
+    model_categorical = DecisionTreeRegressor(random_state=0)
+
+    # use bagging to create an ensemble of decision tree models for the categorical variables
+    model_categorical_bagging = BaggingRegressor(base_estimator=model_categorical, n_estimators=10, random_state=0)
+    model_categorical_bagging.fit(x_data_nonlinear_categorical, y_train)
+
+    # get the predicted values for the categorical variables
+    y_train_categorical = model_categorical_bagging.predict(x_data_nonlinear_categorical)
+
+    # concatenate the predicted categorical values with the linear data
+    x_train = pd.concat([x_train_linear, pd.DataFrame(y_train_categorical, columns=['day_of_week_prediction'])], axis=1)
+    
+    # fit the linear model
+    model_linear = LinearRegression().fit(x_train, y_train)
+
+    # use bagging to create an ensemble of linear models
+    model_linear_bagging = BaggingRegressor(base_estimator=model_linear, n_estimators=10, random_state=0)
+    model_linear_bagging.fit(x_train, y_train)
+
+    r_2 = model_linear_bagging.score(x_train, y_train)
+    print(f"coefficient of determination: {r_2}")
+    return model_linear_bagging, model_categorical_bagging, r_2
+
 data = load_data()
 data_ml, input_cols, output_cols = convert_data(data)
 data_train, data_test = resample_24h(data_ml)
-x_train, y_train, x_test, y_test = analyse_hp_power_consumption(data_train, output_cols)
+x_train, y_train, x_test, y_test = analyse_hp_power_consumption(data_train,data_test, output_cols)
 model, r_2 = data_to_model(x_train, y_train)
 
 y_pred = model.predict(x_test)
