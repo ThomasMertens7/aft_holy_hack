@@ -69,16 +69,30 @@ def convert_data(data):
 
     return data_ml, input_cols, output_cols
 
-def resample_24h(data_ml):
-    data_ml_resampled = data_ml.resample('24H').mean()
+def get_first_and_last_date(data):
+    fisrt_entry = data['timestamp'][0]
+    last_entry = data['timestamp'][len(data['timestamp'])-1]
 
-    data_ml_resampled = data_ml_resampled.dropna()
+    first_date = dt.fromtimestamp(float(fisrt_entry) / 1000)
+    last_date = dt.fromtimestamp(float(last_entry) / 1000)
 
-    data_ml_resampled['2022-03-06':'2022-03-10'].plot()
+    return str(first_date.date()), str(last_date.date())
+
+
+def resample_24h(data_ml_train, data_ml_test, train_start_date = '2022-03-06',train_end_date = '2022-03-10', test_start_date='2022-03-16',test_end_date='2022-03-20' ):
+    data_ml_resampled_train = data_ml_train.resample('24H').mean()
+    data_ml_resampled_test = data_ml_test.resample('24H').mean()
+
+    data_ml_resampled_train = data_ml_resampled_train.dropna()
+    data_ml_resampled_test = data_ml_resampled_test.dropna()
+
+    data_ml_resampled_train[train_start_date:train_end_date].plot()
+    data_ml_resampled_test[test_start_date:test_end_date].plot()
 
     # create train test partition
-    data_train = data_ml_resampled['2022-03-06':'2022-03-10']
-    data_test  = data_ml_resampled['2022-03-16':]
+    data_train = data_ml_resampled_train[train_start_date:train_end_date]
+    data_test  = data_ml_resampled_test[test_start_date:test_end_date]
+
     print('-'*20)
     print(data_train.head())
 
@@ -139,35 +153,36 @@ def data_to_nonlinear_model(x_train_linear, x_train_categorical, y_train):
     print(f"coefficient of determination: {r_2}")
     return model_linear_bagging, model_categorical_bagging, r_2
 
-data = load_data()
-data_ml, input_cols, output_cols = convert_data(data)
-data_train, data_test = resample_24h(data_ml)
-x_train, y_train, x_test, y_test = analyse_hp_power_consumption(data_train,data_test, output_cols)
-model, r_2 = data_to_model(x_train, y_train)
+if False:
+    data = load_data()
+    data_ml, input_cols, output_cols = convert_data(data)
+    data_train, data_test = resample_24h(data_ml)
+    x_train, y_train, x_test, y_test = analyse_hp_power_consumption(data_train,data_test, output_cols)
+    model, r_2 = data_to_model(x_train, y_train)
 
-y_pred = model.predict(x_test)
+    y_pred = model.predict(x_test)
 
-str_x = data_test.index[0:len(y_test)].astype(str)
-fig, ax = plt.subplots()
-ax.plot(str_x, y_test)
-ax.plot(str_x, y_pred)
-ax.set_ylabel('Average daily power')
-ax.set_xlabel('Day')
-#ax.set_xticklabels(ax.get_xticks(), rotation = 45)
-ax.legend(['real', 'estimated'])
-ax.set_title('Estimation of Power base on indoor and ambient temperatures ')
+    str_x = data_test.index[0:len(y_test)].astype(str)
+    fig, ax = plt.subplots()
+    ax.plot(str_x, y_test)
+    ax.plot(str_x, y_pred)
+    ax.set_ylabel('Average daily power')
+    ax.set_xlabel('Day')
+    #ax.set_xticklabels(ax.get_xticks(), rotation = 45)
+    ax.legend(['real', 'estimated'])
+    ax.set_title('Estimation of Power base on indoor and ambient temperatures ')
 
 
-fig, ax = plt.subplots()
-y_test = change_power_to_price(str_x, y_test)
-y_pred = change_power_to_price(str_x, y_pred)
-ax.plot(str_x, y_test)
-ax.plot(str_x, y_pred)
-ax.set_ylabel('Average Price per Month (€)')
-ax.set_xlabel('Day')
-ax.legend(['real', 'estimated'])
-ax.set_title('Estimation of Price per month (€) on indoor and ambient temperatures ')
+    fig, ax = plt.subplots()
+    y_test = change_power_to_price(str_x, y_test)
+    y_pred = change_power_to_price(str_x, y_pred)
+    ax.plot(str_x, y_test)
+    ax.plot(str_x, y_pred)
+    ax.set_ylabel('Average Price per Month (€)')
+    ax.set_xlabel('Day')
+    ax.legend(['real', 'estimated'])
+    ax.set_title('Estimation of Price per month (€) on indoor and ambient temperatures ')
 
-plt.show() 
+    plt.show()
 
 

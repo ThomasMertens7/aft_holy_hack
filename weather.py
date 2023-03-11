@@ -3,6 +3,9 @@ import requests
 # pip install requests
 API_KEY = "43319b8fec5105f0a7a0febe31c7bb42"
 
+#usage:
+#print(get_avg_temp_celcius())
+
 def get_location():
     """
     asks the user for a location input
